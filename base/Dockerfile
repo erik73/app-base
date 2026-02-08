@@ -1,34 +1,38 @@
-ARG BUILD_FROM=alpine:3.23
+ARG BUILD_FROM=alpine:3.23.3
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
 # Environment variables
 ENV \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true \
     HOME="/root" \
     LANG="C.UTF-8" \
+    PIP_BREAK_SYSTEM_PACKAGES=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_EXTRA_INDEX_URL="https://wheels.home-assistant.io/musllinux-index/" \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_PREFER_BINARY=1 \
     PS1="$(whoami)@$(hostname):$(pwd)$ " \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
     S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
-    S6_CMD_WAIT_FOR_SERVICES=1 \
     S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0 \
-    TERM="xterm-256color"
-
-# Copy root filesystem
-COPY rootfs /
+    S6_CMD_WAIT_FOR_SERVICES=1 \
+    YARN_HTTP_TIMEOUT=1000000 \
+    TERM="xterm-256color" 
 
 # Set shell
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 
-ARG BASHIO_VERSION="v0.17.5"
-ARG S6_OVERLAY_VERSION="v3.2.2.0"
-ARG TEMPIO_VERSION="2024.11.2"
-
 # Install base system
 ARG BUILD_ARCH=amd64
+ARG BASHIO_VERSION="v0.17.5"
+ARG S6_OVERLAY_VERSION="3.2.2.0"
+ARG TEMPIO_VERSION="2024.11.2"
 RUN \
     set -o pipefail \
     \
     && apk add --no-cache --virtual .build-dependencies \
-        build-base=0.5-r3 \
         tar=1.35-r4 \
         xz=5.8.2-r0 \
     \
@@ -44,21 +48,19 @@ RUN \
         jq=1.8.1-r0 \
         tzdata=2025c-r0 \
     \
-        && S6_ARCH="${BUILD_ARCH}" \
-    && if [ "${BUILD_ARCH}" = "i386" ]; then S6_ARCH="i686"; \
-    elif [ "${BUILD_ARCH}" = "amd64" ]; then S6_ARCH="x86_64"; \
-    elif [ "${BUILD_ARCH}" = "armv7" ]; then S6_ARCH="arm"; fi \
+    && S6_ARCH="${BUILD_ARCH}" \
+    && if [ "${BUILD_ARCH}" = "amd64" ]; then S6_ARCH="x86_64"; fi \
     \
-    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" \
+    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" \
         | tar -C / -Jxpf - \
     \
-    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" \
+    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" \
         | tar -C / -Jxpf - \
     \
-    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/${S6_OVERLAY_VERSION}/s6-overlay-symlinks-noarch.tar.xz" \
+    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-symlinks-noarch.tar.xz" \
         | tar -C / -Jxpf - \
     \
-    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/${S6_OVERLAY_VERSION}/s6-overlay-symlinks-arch.tar.xz" \
+    && curl -L -s "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-symlinks-arch.tar.xz" \
         | tar -C / -Jxpf - \
     \
     && curl -J -L -o /tmp/bashio.tar.gz \
@@ -77,8 +79,13 @@ RUN \
     \
     && apk del --no-cache --purge .build-dependencies \
     && rm -f -r \
-        /tmp/* \
-        /usr/src/*
+        /tmp/*
+
+# Copy root filesystem
+COPY rootfs /
+
+# Copy s6-overlay adjustments
+COPY s6-overlay /package/admin/s6-overlay-${S6_OVERLAY_VERSION}/
 
 # Entrypoint & CMD
 ENTRYPOINT ["/init"]
